@@ -98,16 +98,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   padding: 12px 13px;
 }
 .search { margin: 12px 0; }
-.filter-menus { display: grid; gap: 10px; margin: 12px 0; }
-.filter-menus label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
-.filter-menus select[multiple] {
-  width: 100%;
-  min-height: 92px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 8px;
-}
+.filter-panel { margin: 12px 0; border: 1px solid var(--line); border-radius: 14px; background: rgba(16, 22, 24, 0.35); }
+.filter-panel summary { padding: 12px 14px; color: var(--gold); cursor: pointer; }
+.filter-group { padding: 0 14px 12px; }
+.filter-group h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.filter-options { display: flex; flex-direction: column; gap: 8px; }
+.filter-options label { display: flex; gap: 8px; align-items: center; }
 .chip {
   border: 1px solid var(--line); background: transparent; color: var(--muted);
   border-radius: 999px; padding: 7px 12px;

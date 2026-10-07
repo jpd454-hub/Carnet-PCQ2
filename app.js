@@ -16,7 +16,8 @@ const state = {
   eventOwnerId: "",
   contactVisibility: "tous",
   editingContact: null,
-  editingEvent: null
+  editingEvent: null,
+  openFilters: { fiches: false, agenda: false }
 };
 
 function load() {
@@ -140,18 +141,10 @@ function renderFiches(data) {
           <h2>Répertoire</h2>
           <button class="btn btn-primary btn-small" data-action="new-contact">Nouvelle fiche</button>
         </div>
-        <div class="filter-menus">
-          <label>Visibilité
-            <select id="contact-visibility" multiple size="3">
-              ${multiOptions([["public", "Public"], ["prive", "Privé"], ["personnel", "Personnel"]], state.contactVisibility)}
-            </select>
-          </label>
-          <label>Catégorie
-            <select id="contact-category" multiple size="2">
-              ${multiOptions([["Contacts", "Contacts"], ["Organismes", "Organismes"]], state.contactCategory)}
-            </select>
-          </label>
-        </div>
+        ${filterPanel("fiches", [
+          ["Visibilité", "contact-visibility", [["public", "Public"], ["prive", "Privé"], ["personnel", "Personnel"]], state.contactVisibility],
+          ["Catégorie", "contact-category", [["Contacts", "Contacts"], ["Organismes", "Organismes"]], state.contactCategory]
+        ])}
         <input class="search" id="search" placeholder="Rechercher un nom, un courriel, un organisme" value="${escapeHtml(state.query)}" />
         <div class="list">
           ${items.length ? items.map((item) => `
@@ -246,33 +239,13 @@ function renderEventFilters(data) {
   return `
     <div class="event-filters">
       <input class="search" id="event-search" placeholder="Filtrer par titre, lieu ou fiche" value="${escapeHtml(state.eventQuery)}" />
-      <div class="filter-menus">
-        <label>Type de fiche
-          <select id="event-type" multiple size="3">
-            ${multiOptions([["personne", "Personnes"], ["organisme", "Organismes"], ["sans", "Sans fiche"]], state.eventType)}
-          </select>
-        </label>
-        <label>Plage
-          <select id="event-band" multiple size="3">
-            ${multiOptions([["matin", "Matin"], ["apres", "Après-midi"], ["soir", "Soir"]], state.eventBand)}
-          </select>
-        </label>
-        <label>Catégorie
-          <select id="event-category" multiple size="2">
-            ${multiOptions([["Événements", "Événements"], ["Rencontres", "Rencontres"]], state.eventCategory)}
-          </select>
-        </label>
-        <label>Utilisateur
-          <select id="event-owner" multiple size="4">
-            ${knownUsers(data).map((user) => `<option value="${escapeHtml(user.id)}" ${state.eventOwnerId.includes(user.id) ? "selected" : ""}>${escapeHtml(user.nom)}</option>`).join("")}
-          </select>
-        </label>
-        <label>Fiche
-          <select id="event-contact" multiple size="4">
-            ${contacts.map((contact) => `<option value="${contact.id}" ${state.eventContactId.includes(contact.id) ? "selected" : ""}>${escapeHtml(contact.nom)}</option>`).join("")}
-          </select>
-        </label>
-      </div>
+      ${filterPanel("agenda", [
+        ["Type de fiche", "event-type", [["personne", "Personnes"], ["organisme", "Organismes"], ["sans", "Sans fiche"]], state.eventType],
+        ["Plage", "event-band", [["matin", "Matin"], ["apres", "Après-midi"], ["soir", "Soir"]], state.eventBand],
+        ["Catégorie", "event-category", [["Événements", "Événements"], ["Rencontres", "Rencontres"]], state.eventCategory],
+        ["Utilisateur", "event-owner", knownUsers(data).map((user) => [user.id, user.nom]), state.eventOwnerId],
+        ["Fiche", "event-contact", contacts.map((contact) => [contact.id, contact.nom]), state.eventContactId]
+      ])}
       <p class="meta">${visible} rencontre${visible > 1 ? "s" : ""} affichée${visible > 1 ? "s" : ""} pour cette journée.</p>
     </div>`;
 }
@@ -587,20 +560,36 @@ function shiftCalendar(direction) {
 }
 
 
+
+function filterPanel(id, groups) {
+  return `<details class="filter-panel" data-filter-panel="${id}" ${state.openFilters[id] ? "open" : ""}>
+    <summary>Filtre</summary>
+    ${groups.map(([title, key, options, selected]) => `<div class="filter-group">
+      <h3>${title}</h3>
+      <div class="filter-options">
+        ${options.map(([value, label]) => `<label><input type="checkbox" data-filter-key="${key}" value="${escapeHtml(value)}" ${selected.includes(value) ? "checked" : ""} /> ${escapeHtml(label)}</label>`).join("")}
+      </div>
+    </div>`).join("")}
+  </details>`;
+}
+
 function multiOptions(options, selected) {
   return options.map(([value, label]) => `<option value="${escapeHtml(value)}" ${selected.includes(value) ? "selected" : ""}>${label}</option>`).join("");
 }
 
 function bindMulti(selector, key) {
-  const field = document.querySelector(selector);
-  if (!field) return;
-  field.onchange = () => {
-    state[key] = [...field.selectedOptions].map((option) => option.value);
-    render();
-  };
+  document.querySelectorAll(`[data-filter-key="${key}"]`).forEach((field) => {
+    field.onchange = () => {
+      state[key] = [...document.querySelectorAll(`[data-filter-key="${key}"]:checked`)].map((option) => option.value);
+      render();
+    };
+  });
 }
 
 function bind(data) {
+  document.querySelectorAll("[data-filter-panel]").forEach((panel) => {
+    panel.ontoggle = () => { state.openFilters[panel.dataset.filterPanel] = panel.open; };
+  });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.onclick = () => { state.view = button.dataset.view; render(); };
   });

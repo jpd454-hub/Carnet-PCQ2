@@ -40,27 +40,28 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .app {
   width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 22px 18px calc(var(--nav) + 28px);
+  padding: 8px 12px calc(var(--nav) + 16px);
 }
 
 .topbar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 22px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.brand { display: flex; gap: 12px; align-items: center; }
+.brand { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .mark {
-  width: 42px; height: 42px; border-radius: 14px;
+  width: 32px; height: 32px; border-radius: 10px; flex: 0 0 32px;
   background: linear-gradient(160deg, #245e59, #142326);
   border: 1px solid rgba(196, 165, 116, 0.4);
   display: grid; place-items: center;
-  color: var(--gold); font-family: var(--serif); font-size: 22px;
+  color: var(--gold); font-family: var(--serif); font-size: 18px;
 }
-.brand h1 { margin: 0; font-family: var(--serif); font-size: 28px; font-weight: 500; }
-.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-.top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.brand h1 { margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 500; }
+.brand p { display: none; }
+.top-actions { display: flex; gap: 8px; flex-wrap: nowrap; }
+.top-actions .btn { min-height: 44px; }
 
 .btn, .btn-ghost, .btn-danger {
   border: 0; border-radius: 999px; padding: 10px 14px;
@@ -144,8 +145,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .cal-nav { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px auto; gap: 6px; align-items: center; width: 100%; }
 .cal-nav h2 { min-width: 0; margin: 0; text-align: center; text-transform: capitalize; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .icon-btn { width: 40px; height: 36px; padding: 0; position: relative; z-index: 1; }
-body[data-view="agenda"] .topbar { display: none; }
+body[data-view="agenda"] .topbar { display: flex; }
 body[data-view="agenda"] .app { padding-top: 8px; }
+.action-stack { display: flex; flex-direction: column; gap: 8px; }
+.action-stack .btn, .action-stack .btn-ghost, .action-stack .btn-danger { min-height: 44px; width: 100%; text-align: center; }
+.section-head { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.section-head .btn { min-height: 44px; }
+@media (max-width: 720px) {
+  .detail-panel:not(.has-selection) { display: none; }
+}
 .quick-filters .filters { flex-wrap: nowrap; }
 .quick-filters .chip { padding: 7px 8px; font-size: 13px; }
 .day-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); display: inline-block; margin-top: 4px; }

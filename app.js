@@ -120,7 +120,7 @@ function renderHome(data) {
       <article class="stat"><span>Organismes</span><strong>${orgs}</strong></article>
     </section>
     <section class="panel">
-      <div class="spread">
+      <div class="section-head">
         <h2>Prochaines rencontres</h2>
         <button class="btn btn-primary btn-small" data-action="new-event">Nouvelle rencontre</button>
       </div>
@@ -143,15 +143,15 @@ function renderFiches(data) {
   return `
     <div class="layout">
       <section class="panel">
-        <div class="spread">
+        <div class="section-head">
           <h2>Répertoire</h2>
           <button class="btn btn-primary btn-small" data-action="new-contact">Nouvelle fiche</button>
         </div>
+        <input class="search" id="search" placeholder="Rechercher un nom, un courriel, un organisme" value="${escapeHtml(state.query)}" />
         ${filterPanel("fiches", [
           ["Visibilité", "contact-visibility", [["public", "Public"], ["prive", "Privé"], ["personnel", "Personnel"]], state.contactVisibility],
           ["Catégorie", "contact-category", [["Contacts", "Contacts"], ["Organismes", "Organismes"]], state.contactCategory]
         ])}
-        <input class="search" id="search" placeholder="Rechercher un nom, un courriel, un organisme" value="${escapeHtml(state.query)}" />
         <div class="list">
           ${items.length ? items.map((item) => `
             <button class="card" data-contact="${item.id}">
@@ -162,7 +162,7 @@ function renderFiches(data) {
             </button>`).join("") : `<p class="empty">Aucune fiche pour le moment.</p>`}
         </div>
       </section>
-      <section class="panel sheet">
+      <section class="panel sheet detail-panel ${selected ? "has-selection" : ""}">
         ${selected ? renderContactDetail(data, selected) : `<h2>Fiche technique</h2><p class="empty">Sélectionnez une fiche ou créez-en une. Chaque fiche peut recevoir un historique de suivi et des rencontres liées.</p>`}
       </section>
     </div>`;
@@ -401,7 +401,7 @@ function renderSettings() {
     <section class="panel sheet">
       <h2>Réglages</h2>
       <p class="meta">Les fiches restent sur cet appareil. L’export permet de transmettre le carnet, ou de le reprendre sur un autre téléphone. Une synchronisation continue sera ajoutée au moment du passage vers l’application connectée.</p>
-      <div class="row" style="flex-wrap:wrap">
+      <div class="action-stack">
         <button class="btn btn-primary" data-action="notify">Activer les rappels</button>
         <button class="btn" data-action="export">Exporter le carnet</button>
         <button class="btn" data-action="import">Importer</button>
@@ -430,7 +430,7 @@ function renderPartage() {
           ${CarnetPartage.roles.map((role) => `<option value="${role}" ${profile.role === role ? "selected" : ""}>${role}</option>`).join("")}
         </select>
       </div>
-      <div class="row" style="flex-wrap:wrap">
+      <div class="action-stack">
         <button class="btn btn-primary" data-action="share-save">Enregistrer le profil</button>
         <button class="btn" data-action="share-export">Préparer un lot</button>
         <button class="btn" data-action="share-import">Fusionner un lot</button>

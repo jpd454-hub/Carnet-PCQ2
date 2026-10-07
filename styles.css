@@ -144,11 +144,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .cal-nav { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px auto; gap: 6px; align-items: center; width: 100%; }
 .cal-nav h2 { min-width: 0; margin: 0; text-align: center; text-transform: capitalize; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .icon-btn { width: 40px; height: 36px; padding: 0; position: relative; z-index: 1; }
-body[data-view="agenda"] .topbar { margin-bottom: 8px; align-items: center; }
-body[data-view="agenda"] .brand p,
-body[data-view="agenda"] .top-actions { display: none; }
-body[data-view="agenda"] .brand h1 { font-size: 20px; }
-body[data-view="agenda"] .app { padding-top: 10px; }
+body[data-view="agenda"] .topbar { display: none; }
+body[data-view="agenda"] .app { padding-top: 8px; }
 .quick-filters .filters { flex-wrap: nowrap; }
 .quick-filters .chip { padding: 7px 8px; font-size: 13px; }
 .day-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); display: inline-block; margin-top: 4px; }

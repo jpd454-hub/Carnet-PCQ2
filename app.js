@@ -102,6 +102,7 @@ function render() {
     reglages: renderSettings
   };
   root.innerHTML = views[state.view](data);
+  document.body.dataset.view = state.view;
   document.querySelectorAll(".nav button").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === state.view);
   });

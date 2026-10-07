@@ -139,10 +139,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .filter-row { display: flex; gap: 8px; align-items: center; }
 .filter-label { flex: 0 0 64px; color: var(--faint); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
 .filter-row .filters { flex: 1; flex-wrap: nowrap; overflow-x: auto; margin: 0; padding-bottom: 2px; }
-.cal-toolbar { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: nowrap; }
-.cal-nav { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
-.cal-nav h2 { min-width: 0; text-align: center; text-transform: capitalize; font-size: 16px; white-space: nowrap; }
-.icon-btn { width: 36px; padding-left: 0; padding-right: 0; }
+.cal-toolbar { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.cal-toolbar .filters { margin: 0; }
+.cal-nav { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px auto; gap: 6px; align-items: center; width: 100%; }
+.cal-nav h2 { min-width: 0; margin: 0; text-align: center; text-transform: capitalize; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn { width: 40px; height: 36px; padding: 0; position: relative; z-index: 1; }
+body[data-view="agenda"] .topbar { margin-bottom: 8px; align-items: center; }
+body[data-view="agenda"] .brand p,
+body[data-view="agenda"] .top-actions { display: none; }
+body[data-view="agenda"] .brand h1 { font-size: 20px; }
+body[data-view="agenda"] .app { padding-top: 10px; }
 .quick-filters .filters { flex-wrap: nowrap; }
 .quick-filters .chip { padding: 7px 8px; font-size: 13px; }
 .day-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); display: inline-block; margin-top: 4px; }

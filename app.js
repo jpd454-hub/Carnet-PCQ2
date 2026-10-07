@@ -242,35 +242,24 @@ function renderEventFilters(data) {
   const contacts = [...data.contacts].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
   const windowItems = data.evenements.filter((item) => canSeeEvent(item) && matchesPeriod(item));
   const visible = windowItems.filter((item) => matchesEventFilter(data, item)).length;
-  const chip = (attr, key, label, current) => `<button class="chip ${current === key ? "active" : ""}" ${attr}="${key}">${label}</button>`;
+  const chip = (attr, key, label, on) => `<button class="chip ${on ? "active" : ""}" ${attr}="${key}">${label}</button>`;
   return `
     <div class="event-filters">
-      <div class="filter-row">
-        <span class="filter-label">Période</span>
-        <div class="filters" aria-label="Période">
-          ${[["jour", "Aujourd’hui"], ["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"], ["tous", "Tout"]].map(([key, label]) => chip("data-event-period", key, label, state.eventPeriod)).join("")}
+      <div class="filter-row quick-filters">
+        <div class="filters" aria-label="Raccourcis">
+          ${chip("data-event-period", "jour", "Aujourd’hui", state.eventPeriod === "jour")}
+          ${chip("data-event-period", "7", "7 jours", state.eventPeriod === "7")}
+          ${chip("data-event-statut", "actifs", "Actifs", state.eventStatut === "actifs")}
+          ${chip("data-event-suivi", "retard", "En retard", state.eventSuivi === "retard")}
+          <button class="chip ${state.openFilters.agenda ? "active" : ""}" data-filter-toggle="agenda">Filtres</button>
         </div>
       </div>
-      <div class="filter-row">
-        <span class="filter-label">Statut</span>
-        <div class="filters" aria-label="Statut">
-          ${[["actifs", "Actifs"], ["a-venir", "À venir"], ["en-cours", "En cours"], ["tenue", "Tenue"], ["reportee", "Reportée"], ["annulee", "Annulée"], ["tous", "Tous"]].map(([key, label]) => chip("data-event-statut", key, label, state.eventStatut)).join("")}
-        </div>
-      </div>
-      <div class="filter-row">
-        <span class="filter-label">Suivi</span>
-        <div class="filters" aria-label="Suivi">
-          ${[["tous", "Tous"], ["ouvert", "Action ouverte"], ["sans", "Sans action"], ["retard", "En retard"]].map(([key, label]) => chip("data-event-suivi", key, label, state.eventSuivi)).join("")}
-        </div>
-      </div>
-      <div class="filter-row">
-        <span class="filter-label">Lieu</span>
-        <div class="filters" aria-label="Lieu">
-          ${[["tous", "Tous"], ["avec", "Avec lieu"], ["sans", "Sans lieu"]].map(([key, label]) => chip("data-event-lieu", key, label, state.eventLieu)).join("")}
-        </div>
-      </div>
-      <input class="search" id="event-search" placeholder="Filtrer par titre, lieu ou fiche" value="${escapeHtml(state.eventQuery)}" />
+      <input class="search" id="event-search" placeholder="Titre, lieu ou fiche" value="${escapeHtml(state.eventQuery)}" />
       ${filterPanel("agenda", [
+        ["Période", "event-period", [["jour", "Aujourd’hui"], ["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"], ["tous", "Tout"]], [state.eventPeriod]],
+        ["Statut", "event-statut", [["actifs", "Actifs"], ["a-venir", "À venir"], ["en-cours", "En cours"], ["tenue", "Tenue"], ["reportee", "Reportée"], ["annulee", "Annulée"], ["tous", "Tous"]], [state.eventStatut]],
+        ["Suivi", "event-suivi", [["tous", "Tous"], ["ouvert", "Action ouverte"], ["sans", "Sans action"], ["retard", "En retard"]], [state.eventSuivi]],
+        ["Lieu", "event-lieu", [["tous", "Tous"], ["avec", "Avec lieu"], ["sans", "Sans lieu"]], [state.eventLieu]],
         ["Type de fiche", "event-type", [["personne", "Personnes"], ["organisme", "Organismes"], ["sans", "Sans fiche"]], state.eventType],
         ["Plage", "event-band", [["matin", "Matin"], ["apres", "Après-midi"], ["soir", "Soir"]], state.eventBand],
         ["Catégorie", "event-category", [["Événements", "Événements"], ["Rencontres", "Rencontres"]], state.eventCategory],
@@ -296,8 +285,9 @@ function renderMonth(data, selected) {
         return `<div class="day ${day.outside ? "muted" : ""} ${key === toDateKey(new Date()) ? "today" : ""} ${key === state.selectedDay ? "selected" : ""}" data-day="${key}">
           <span class="day-num">${day.date.getDate()}</span>
           <div class="day-events">
-            ${items.slice(0, 3).map((item) => `<button class="pill" data-event="${item.id}">${escapeHtml(rangeLabel(item))}</button>`).join("")}
-            ${items.length > 3 ? `<span class="more">+${items.length - 3}</span>` : ""}
+            ${items.length ? `<span class="day-dot" aria-label="${items.length} rencontre${items.length > 1 ? "s" : ""}"></span>` : ""}
+            ${items.slice(0, 2).map((item) => `<button class="pill" data-event="${item.id}">${escapeHtml(rangeLabel(item))}</button>`).join("")}
+            ${items.length > 2 ? `<span class="more">+${items.length - 2}</span>` : ""}
           </div>
         </div>`;
       }).join("")}
@@ -306,13 +296,8 @@ function renderMonth(data, selected) {
 
 function renderWeek(data, selected) {
   const days = weekDays(selected);
-  const hours = dayHours();
   return `
     <div class="week-board">
-      <div class="week-scale" aria-hidden="true">
-        <div class="week-scale-head"></div>
-        ${hours.map((hour) => `<span>${hourLabel(hour)}</span>`).join("")}
-      </div>
       <div class="week-cols">
         ${days.map((date) => {
           const key = toDateKey(date);
@@ -321,9 +306,10 @@ function renderWeek(data, selected) {
             <button class="week-head ${key === toDateKey(new Date()) ? "today" : ""}" data-day="${key}">
               <small>${new Intl.DateTimeFormat("fr-CA", { weekday: "short" }).format(date)}</small>
               <strong>${date.getDate()}</strong>
+              ${items.length ? `<span class="day-dot"></span>` : ""}
             </button>
             <div class="week-track">
-              ${hours.map((hour) => hourSlot(key, hour, items)).join("")}
+              ${items.length ? items.map((item) => `<button class="slot-event" data-event="${item.id}"><strong>${escapeHtml(rangeLabel(item))}</strong><span>${escapeHtml(item.nom || item.titre)}</span></button>`).join("") : `<span class="slot-empty">Libre</span>`}
             </div>
           </div>`;
         }).join("")}
@@ -333,7 +319,9 @@ function renderWeek(data, selected) {
 
 function renderHourlyDay(data, key) {
   const items = eventsOn(data, key);
-  return `<div class="hour-day">${dayHours().map((hour) => hourSlot(key, hour, items, true)).join("")}</div>`;
+  if (!items.length) return `<p class="empty">Aucune rencontre sur cette journée.</p>`;
+  const hours = [...new Set(items.flatMap((item) => occupiedHours(item, key)))].sort((a, b) => a - b);
+  return `<div class="hour-day">${hours.map((hour) => hourSlot(key, hour, items, true)).join("")}</div>`;
 }
 
 function hourSlot(dayKey, hour, items, detailed) {
@@ -368,8 +356,15 @@ function eventTouchesHour(item, dayKey, hour) {
   return start < slotEnd && end > slotStart;
 }
 
-function dayHours() {
-  return Array.from({ length: 14 }, (_, index) => index + 7);
+function occupiedHours(item, dayKey) {
+  const start = eventDate(item.debut);
+  const end = eventDate(item.fin);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+  const hours = [];
+  for (let hour = 0; hour < 24; hour += 1) {
+    if (eventTouchesHour(item, dayKey, hour)) hours.push(hour);
+  }
+  return hours.length ? [hours[0]] : [];
 }
 
 function hourLabel(hour) {
@@ -695,6 +690,25 @@ function bindMulti(selector, key) {
 function bind(data) {
   document.querySelectorAll("[data-filter-panel]").forEach((panel) => {
     panel.ontoggle = () => { state.openFilters[panel.dataset.filterPanel] = panel.open; };
+  });
+  document.querySelectorAll("[data-filter-toggle]").forEach((button) => {
+    button.onclick = () => {
+      const id = button.dataset.filterToggle;
+      state.openFilters[id] = !state.openFilters[id];
+      render();
+    };
+  });
+  document.querySelectorAll("[data-filter-key='event-period']").forEach((field) => {
+    field.onchange = () => { if (field.checked) { state.eventPeriod = field.value; render(); } };
+  });
+  document.querySelectorAll("[data-filter-key='event-statut']").forEach((field) => {
+    field.onchange = () => { if (field.checked) { state.eventStatut = field.value; render(); } };
+  });
+  document.querySelectorAll("[data-filter-key='event-suivi']").forEach((field) => {
+    field.onchange = () => { if (field.checked) { state.eventSuivi = field.value; render(); } };
+  });
+  document.querySelectorAll("[data-filter-key='event-lieu']").forEach((field) => {
+    field.onchange = () => { if (field.checked) { state.eventLieu = field.value; render(); } };
   });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.onclick = () => { state.view = button.dataset.view; render(); };

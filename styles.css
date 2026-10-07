@@ -142,7 +142,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .cal-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
 .cal-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cal-nav h2 { min-width: 180px; text-align: center; text-transform: capitalize; font-size: 20px; }
-.month-grid { grid-auto-rows: minmax(92px, 1fr); }
+.day-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); display: inline-block; margin-top: 4px; }
+.day { min-height: 44px; }
+.cal-nav h2 { min-width: 0; }
+.week-cols { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; min-width: 0; }
+.week-track { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+@media (max-width: 720px) {
+  .month-grid { grid-auto-rows: minmax(44px, auto); }
+  .pill { display: none; }
+  .day.selected .pill, .day .more { display: block; }
+  .day-dot { display: inline-block; }
+  .week-cols { grid-template-columns: 1fr; }
+  .week-head { height: auto; min-height: 44px; flex-direction: row; gap: 8px; }
+  .cal-nav h2 { min-width: 0; font-size: 16px; }
+  .quick-filters .filters { flex-wrap: wrap; }
+}
 .day {
   min-height: 92px; border-radius: 12px; border: 1px solid var(--line);
   background: rgba(16, 22, 24, 0.35); color: var(--text); position: relative;
@@ -186,10 +200,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .slot-event.continue { background: rgba(196, 165, 116, 0.12); color: var(--muted); font-size: 12px; }
 .hour-day { margin-top: 8px; }
 @media (max-width: 720px) {
-  .month-grid { grid-auto-rows: minmax(64px, auto); }
+  .month-grid { grid-auto-rows: minmax(44px, auto); }
   .pill { display: none; }
   .day.selected .pill, .day .more { display: block; }
-  .day::after { content: ""; }
+  .week-cols { grid-template-columns: 1fr; }
 }
 
 .sheet { display: flex; flex-direction: column; gap: 12px; }

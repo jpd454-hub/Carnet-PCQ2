@@ -128,8 +128,8 @@ function renderFiches(data) {
   const q = state.query.trim().toLowerCase();
   const items = data.contacts
     .filter((item) => canSeeEvent(item))
-    .filter((item) => state.contactVisibility === "tous" || item.visibilite === state.contactVisibility)
-    .filter((item) => state.filter === "tous" || item.categorie === state.filter)
+    .filter((item) => !state.contactVisibility.length || state.contactVisibility.includes(item.visibilite))
+    .filter((item) => !state.contactCategory.length || state.contactCategory.includes(item.categorie))
     .filter((item) => !q || [item.nom, item.telephone, item.courriel, item.adresse, item.organisme, item.notes].join(" ").toLowerCase().includes(q))
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
   const selected = data.contacts.find((item) => item.id === state.selectedContactId);
@@ -140,13 +140,17 @@ function renderFiches(data) {
           <h2>Répertoire</h2>
           <button class="btn btn-primary btn-small" data-action="new-contact">Nouvelle fiche</button>
         </div>
-        <div class="filters" style="margin-top:12px" aria-label="Visibilité du contact">
-          ${[["tous", "Tous"], ["public", "Public"], ["prive", "Privé"], ["personnel", "Personnel"]].map(([key, label]) => `<button class="chip ${state.contactVisibility === key ? "active" : ""}" data-contact-visibility="${key}">${label}</button>`).join("")}
-        </div>
-        <div class="filters" aria-label="Catégorie de contact">
-          <button class="chip ${state.filter === "tous" ? "active" : ""}" data-filter="tous">Tous</button>
-          <button class="chip ${state.filter === "Contacts" ? "active" : ""}" data-filter="Contacts">Contacts</button>
-          <button class="chip ${state.filter === "Organismes" ? "active" : ""}" data-filter="Organismes">Organismes</button>
+        <div class="filter-menus">
+          <label>Visibilité
+            <select id="contact-visibility" multiple size="3">
+              ${multiOptions([["public", "Public"], ["prive", "Privé"], ["personnel", "Personnel"]], state.contactVisibility)}
+            </select>
+          </label>
+          <label>Catégorie
+            <select id="contact-category" multiple size="2">
+              ${multiOptions([["Contacts", "Contacts"], ["Organismes", "Organismes"]], state.contactCategory)}
+            </select>
+          </label>
         </div>
         <input class="search" id="search" placeholder="Rechercher un nom, un courriel, un organisme" value="${escapeHtml(state.query)}" />
         <div class="list">
@@ -242,25 +246,32 @@ function renderEventFilters(data) {
   return `
     <div class="event-filters">
       <input class="search" id="event-search" placeholder="Filtrer par titre, lieu ou fiche" value="${escapeHtml(state.eventQuery)}" />
-      <div class="filters" aria-label="Type de fiche">
-        ${[["tous", "Toutes"], ["personne", "Personnes"], ["organisme", "Organismes"], ["sans", "Sans fiche"]].map(([key, label]) => `<button class="chip ${state.eventType === key ? "active" : ""}" data-event-type="${key}">${label}</button>`).join("")}
-      </div>
-      <div class="filters" aria-label="Plage de la journée">
-        ${[["toutes", "Journée"], ["matin", "Matin"], ["apres", "Après-midi"], ["soir", "Soir"]].map(([key, label]) => `<button class="chip ${state.eventBand === key ? "active" : ""}" data-event-band="${key}">${label}</button>`).join("")}
-      </div>
-      <div class="filters" aria-label="Catégorie">
-        ${[["toutes", "Toutes"], ["Événements", "Événements"], ["Rencontres", "Rencontres"]].map(([key, label]) => `<button class="chip ${state.eventCategory === key ? "active" : ""}" data-event-category="${key}">${label}</button>`).join("")}
-      </div>
-      <div class="filters" aria-label="Utilisateur">
-        <button class="chip ${state.eventOwnerId === "" ? "active" : ""}" data-event-owner="">Tous les utilisateurs</button>
-        ${knownUsers(data).map((user) => `<button class="chip ${state.eventOwnerId === user.id ? "active" : ""}" data-event-owner="${escapeHtml(user.id)}">${escapeHtml(user.nom)}</button>`).join("")}
-      </div>
-      <div class="field">
-        <label for="event-contact">Fiche</label>
-        <select id="event-contact">
-          <option value="">Toutes les fiches</option>
-          ${contacts.map((contact) => `<option value="${contact.id}" ${state.eventContactId === contact.id ? "selected" : ""}>${escapeHtml(contact.nom)}</option>`).join("")}
-        </select>
+      <div class="filter-menus">
+        <label>Type de fiche
+          <select id="event-type" multiple size="3">
+            ${multiOptions([["personne", "Personnes"], ["organisme", "Organismes"], ["sans", "Sans fiche"]], state.eventType)}
+          </select>
+        </label>
+        <label>Plage
+          <select id="event-band" multiple size="3">
+            ${multiOptions([["matin", "Matin"], ["apres", "Après-midi"], ["soir", "Soir"]], state.eventBand)}
+          </select>
+        </label>
+        <label>Catégorie
+          <select id="event-category" multiple size="2">
+            ${multiOptions([["Événements", "Événements"], ["Rencontres", "Rencontres"]], state.eventCategory)}
+          </select>
+        </label>
+        <label>Utilisateur
+          <select id="event-owner" multiple size="4">
+            ${knownUsers(data).map((user) => `<option value="${escapeHtml(user.id)}" ${state.eventOwnerId.includes(user.id) ? "selected" : ""}>${escapeHtml(user.nom)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Fiche
+          <select id="event-contact" multiple size="4">
+            ${contacts.map((contact) => `<option value="${contact.id}" ${state.eventContactId.includes(contact.id) ? "selected" : ""}>${escapeHtml(contact.nom)}</option>`).join("")}
+          </select>
+        </label>
       </div>
       <p class="meta">${visible} rencontre${visible > 1 ? "s" : ""} affichée${visible > 1 ? "s" : ""} pour cette journée.</p>
     </div>`;
@@ -494,12 +505,14 @@ function coversDay(item, key) {
 
 function matchesEventFilter(data, item) {
   const contact = data.contacts.find((entry) => entry.id === item.contactId);
-  if (state.eventType === "sans" && contact) return false;
-  if (state.eventType === "personne" && contact?.type !== "personne") return false;
-  if (state.eventType === "organisme" && contact?.type !== "organisme") return false;
-  if (state.eventCategory !== "toutes" && String(item.categorie || "").trim() !== state.eventCategory) return false;
-  if (state.eventOwnerId && item.ownerId !== state.eventOwnerId) return false;
-  if (!matchesBand(item, state.eventBand)) return false;
+  if (state.eventType.length) {
+    const kind = !contact ? "sans" : contact.type === "organisme" ? "organisme" : contact.type === "personne" ? "personne" : "";
+    if (!state.eventType.includes(kind)) return false;
+  }
+  if (state.eventCategory.length && !state.eventCategory.includes(String(item.categorie || "").trim())) return false;
+  if (state.eventOwnerId.length && !state.eventOwnerId.includes(item.ownerId)) return false;
+  if (state.eventContactId.length && !state.eventContactId.includes(item.contactId)) return false;
+  if (state.eventBand.length && !state.eventBand.some((band) => matchesBand(item, band))) return false;
   const q = state.eventQuery.trim().toLowerCase();
   if (!q) return true;
   const haystack = [item.titre, item.lieu, item.notes, item.categorie, item.ownerName, contact?.nom, contact?.organisation].join(" ").toLowerCase();
@@ -573,16 +586,26 @@ function shiftCalendar(direction) {
   render();
 }
 
+
+function multiOptions(options, selected) {
+  return options.map(([value, label]) => `<option value="${escapeHtml(value)}" ${selected.includes(value) ? "selected" : ""}>${label}</option>`).join("");
+}
+
+function bindMulti(selector, key) {
+  const field = document.querySelector(selector);
+  if (!field) return;
+  field.onchange = () => {
+    state[key] = [...field.selectedOptions].map((option) => option.value);
+    render();
+  };
+}
+
 function bind(data) {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.onclick = () => { state.view = button.dataset.view; render(); };
   });
-  document.querySelectorAll("[data-contact-visibility]").forEach((button) => {
-    button.onclick = () => { state.contactVisibility = button.dataset.contactVisibility; render(); };
-  });
-  document.querySelectorAll("[data-filter]").forEach((button) => {
-    button.onclick = () => { state.filter = button.dataset.filter; render(); };
-  });
+  bindMulti("#contact-visibility", "contactVisibility");
+  bindMulti("#contact-category", "contactCategory");
   const search = document.querySelector("#search");
   if (search) {
     search.oninput = () => { state.query = search.value; render(); document.querySelector("#search")?.focus(); };
@@ -600,18 +623,11 @@ function bind(data) {
   document.querySelectorAll("[data-cal]").forEach((button) => {
     button.onclick = () => { state.calendarMode = button.dataset.cal; render(); };
   });
-  document.querySelectorAll("[data-event-type]").forEach((button) => {
-    button.onclick = () => { state.eventType = button.dataset.eventType; render(); };
-  });
-  document.querySelectorAll("[data-event-band]").forEach((button) => {
-    button.onclick = () => { state.eventBand = button.dataset.eventBand; render(); };
-  });
-  document.querySelectorAll("[data-event-category]").forEach((button) => {
-    button.onclick = () => { state.eventCategory = button.dataset.eventCategory; render(); };
-  });
-  document.querySelectorAll("[data-event-owner]").forEach((button) => {
-    button.onclick = () => { state.eventOwnerId = button.dataset.eventOwner; render(); };
-  });
+  bindMulti("#event-type", "eventType");
+  bindMulti("#event-band", "eventBand");
+  bindMulti("#event-category", "eventCategory");
+  bindMulti("#event-owner", "eventOwnerId");
+  bindMulti("#event-contact", "eventContactId");
   const eventSearch = document.querySelector("#event-search");
   if (eventSearch) {
     eventSearch.oninput = () => {
@@ -622,8 +638,7 @@ function bind(data) {
       if (next) { next.focus(); next.setSelectionRange(pos, pos); }
     };
   }
-  const eventContact = document.querySelector("#event-contact");
-  if (eventContact) eventContact.onchange = () => { state.eventContactId = eventContact.value; render(); };
+
   document.querySelectorAll("[data-day]").forEach((node) => {
     node.onclick = (event) => {
       if (event.target.closest("[data-event]")) return;

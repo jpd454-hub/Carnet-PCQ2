@@ -7,11 +7,17 @@ const state = {
   selectedContactId: null,
   month: startOfMonth(new Date()),
   selectedDay: toDateKey(new Date()),
+  calendarMode: "mois",
+  eventQuery: "",
+  eventType: "tous",
+  eventContactId: "",
+  eventBand: "toutes",
+  eventCategory: "toutes",
+  eventOwnerId: "",
+  contactVisibility: "tous",
   editingContact: null,
   editingEvent: null
 };
-
-let deferredInstall = null;
 
 function load() {
   try {
@@ -76,7 +82,7 @@ function contactName(data, id) {
 function upcoming(data) {
   const now = Date.now() - 60 * 60 * 1000;
   return data.evenements
-    .filter((item) => new Date(item.debut).getTime() >= now)
+    .filter((item) => canSeeEvent(item) && new Date(item.debut).getTime() >= now)
     .sort((a, b) => new Date(a.debut) - new Date(b.debut));
 }
 
@@ -98,11 +104,11 @@ function render() {
 
 function renderHome(data) {
   const next = upcoming(data).slice(0, 4);
-  const people = data.contacts.filter((item) => item.type === "personne").length;
-  const orgs = data.contacts.length - people;
+  const people = data.contacts.filter((item) => canSeeEvent(item) && item.type === "personne").length;
+  const orgs = data.contacts.filter((item) => canSeeEvent(item)).length - people;
   return `
     <section class="stats">
-      <article class="stat"><span>Fiches</span><strong>${data.contacts.length}</strong></article>
+      <article class="stat"><span>Fiches</span><strong>${data.contacts.filter((item) => canSeeEvent(item)).length}</strong></article>
       <article class="stat"><span>Personnes</span><strong>${people}</strong></article>
       <article class="stat"><span>Organismes</span><strong>${orgs}</strong></article>
     </section>
@@ -121,8 +127,10 @@ function renderHome(data) {
 function renderFiches(data) {
   const q = state.query.trim().toLowerCase();
   const items = data.contacts
-    .filter((item) => state.filter === "tous" || item.type === state.filter)
-    .filter((item) => !q || [item.nom, item.organisation, item.fonction, item.ville, item.contexte].join(" ").toLowerCase().includes(q))
+    .filter((item) => canSeeEvent(item))
+    .filter((item) => state.contactVisibility === "tous" || item.visibilite === state.contactVisibility)
+    .filter((item) => state.filter === "tous" || item.categorie === state.filter)
+    .filter((item) => !q || [item.nom, item.telephone, item.courriel, item.adresse, item.organisme, item.notes].join(" ").toLowerCase().includes(q))
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
   const selected = data.contacts.find((item) => item.id === state.selectedContactId);
   return `
@@ -132,16 +140,22 @@ function renderFiches(data) {
           <h2>Répertoire</h2>
           <button class="btn btn-primary btn-small" data-action="new-contact">Nouvelle fiche</button>
         </div>
-        <div class="filters" style="margin-top:12px">
-          ${["tous", "personne", "organisme"].map((key) => `<button class="chip ${state.filter === key ? "active" : ""}" data-filter="${key}">${labelType(key)}</button>`).join("")}
+        <div class="filters" style="margin-top:12px" aria-label="Visibilité du contact">
+          ${[["tous", "Tous"], ["public", "Public"], ["prive", "Privé"], ["personnel", "Personnel"]].map(([key, label]) => `<button class="chip ${state.contactVisibility === key ? "active" : ""}" data-contact-visibility="${key}">${label}</button>`).join("")}
         </div>
-        <input class="search" id="search" placeholder="Rechercher un nom, une ville, un enjeu" value="${escapeHtml(state.query)}" />
+        <div class="filters" aria-label="Catégorie de contact">
+          <button class="chip ${state.filter === "tous" ? "active" : ""}" data-filter="tous">Tous</button>
+          <button class="chip ${state.filter === "Contacts" ? "active" : ""}" data-filter="Contacts">Contacts</button>
+          <button class="chip ${state.filter === "Organismes" ? "active" : ""}" data-filter="Organismes">Organismes</button>
+        </div>
+        <input class="search" id="search" placeholder="Rechercher un nom, un courriel, un organisme" value="${escapeHtml(state.query)}" />
         <div class="list">
           ${items.length ? items.map((item) => `
             <button class="card" data-contact="${item.id}">
               <strong>${escapeHtml(item.nom)}</strong>
-              <div class="meta">${escapeHtml([item.fonction, item.organisation].filter(Boolean).join(" · ") || "Fiche sans fonction")}</div>
-              <span class="tag">${item.type === "organisme" ? "Organisme" : "Personne"}</span>
+              <div class="meta">${escapeHtml([item.telephone, item.courriel, item.organisme].filter(Boolean).join(" · "))}</div>
+              ${item.categorie ? `<span class="tag">${escapeHtml(item.categorie)}</span>` : ""}
+              <span class="tag">${visibilityLabel(item.visibilite) || "Sans visibilité"}</span>
             </button>`).join("") : `<p class="empty">Aucune fiche pour le moment.</p>`}
         </div>
       </section>
@@ -159,17 +173,15 @@ function renderContactDetail(data, contact) {
       <h2>${escapeHtml(contact.nom)}</h2>
       <div class="row">
         <button class="btn-ghost btn-small" data-action="edit-contact" data-id="${contact.id}">Modifier</button>
-        <button class="btn-danger btn-small" data-action="delete-contact" data-id="${contact.id}">Retirer</button>
+        ${ownsEvent(contact) ? `<button class="btn-danger btn-small" data-action="delete-contact" data-id="${contact.id}">Retirer</button>` : ""}
       </div>
     </div>
     <div>
-      <span class="tag">${contact.type === "organisme" ? "Organisme" : "Personne"}</span>
+      ${contact.categorie ? `<span class="tag">${escapeHtml(contact.categorie)}</span>` : ""}
+      <span class="tag">${visibilityLabel(contact.visibilite) || "Sans visibilité"}</span>
       ${contact.ville ? `<span class="tag">${escapeHtml(contact.ville)}</span>` : ""}
     </div>
-    <p class="meta">${escapeHtml([contact.fonction, contact.organisation, contact.telephone, contact.courriel].filter(Boolean).join(" · "))}</p>
-    ${block("Contexte", contact.contexte)}
-    ${block("Enjeux et points à aborder", contact.enjeux)}
-    ${block("Engagements", contact.engagements)}
+    <p class="meta">${escapeHtml([contact.telephone, contact.courriel, contact.adresse, contact.organisme].filter(Boolean).join(" · "))}</p>
     ${block("Notes", contact.notes)}
     <div>
       <div class="spread"><h2 style="font-size:18px">Suivis</h2></div>
@@ -196,38 +208,177 @@ function block(title, value) {
 }
 
 function renderAgenda(data) {
-  const monthLabel = new Intl.DateTimeFormat("fr-CA", { month: "long", year: "numeric" }).format(state.month);
-  const days = calendarDays(state.month);
-  const marked = new Set(data.evenements.map((item) => toDateKey(new Date(item.debut))));
-  const dayEvents = data.evenements
-    .filter((item) => toDateKey(new Date(item.debut)) === state.selectedDay)
-    .sort((a, b) => new Date(a.debut) - new Date(b.debut));
+  const selected = new Date(state.selectedDay + "T12:00:00");
+  const label = state.calendarMode === "semaine" ? weekLabel(selected) : monthLabel(selected);
   return `
-    <div class="layout">
-      <section class="panel">
-        <div class="cal-head">
-          <button class="btn-ghost btn-small" data-action="prev-month">Mois précédent</button>
-          <h2 style="font-size:18px;text-transform:capitalize">${monthLabel}</h2>
-          <button class="btn-ghost btn-small" data-action="next-month">Mois suivant</button>
+    <section class="panel calendar-shell">
+      <div class="cal-toolbar">
+        <div class="filters" role="tablist" aria-label="Vue du calendrier">
+          <button class="chip ${state.calendarMode === "semaine" ? "active" : ""}" data-cal="semaine">Semaine</button>
+          <button class="chip ${state.calendarMode === "mois" ? "active" : ""}" data-cal="mois">Mois</button>
         </div>
-        <div class="weekdays">${["L", "M", "M", "J", "V", "S", "D"].map((d) => `<span>${d}</span>`).join("")}</div>
-        <div class="days">
-          ${days.map((day) => {
-            const key = toDateKey(day.date);
-            return `<button class="day ${day.outside ? "muted" : ""} ${key === toDateKey(new Date()) ? "today" : ""} ${key === state.selectedDay ? "selected" : ""}" data-day="${key}">${day.date.getDate()}${marked.has(key) ? `<i class="dot"></i>` : ""}</button>`;
-          }).join("")}
+        <div class="cal-nav">
+          <button class="btn-ghost btn-small" data-action="cal-prev" aria-label="Période précédente">Précédent</button>
+          <h2>${escapeHtml(label)}</h2>
+          <button class="btn-ghost btn-small" data-action="cal-next" aria-label="Période suivante">Suivant</button>
+          <button class="btn-ghost btn-small" data-action="cal-today">Aujourd’hui</button>
         </div>
-      </section>
-      <section class="panel">
-        <div class="spread">
-          <h2 style="text-transform:capitalize">${formatDay(state.selectedDay)}</h2>
-          <button class="btn btn-primary btn-small" data-action="new-event">Ajouter</button>
-        </div>
-        <div class="list" style="margin-top:12px">
-          ${dayEvents.length ? dayEvents.map(eventCard).join("") : `<p class="empty">Aucune rencontre ce jour.</p>`}
-        </div>
-      </section>
+      </div>
+      ${renderEventFilters(data)}
+      ${state.calendarMode === "semaine" ? renderWeek(data, selected) : renderMonth(data, selected)}
+    </section>
+    <section class="panel">
+      <div class="spread">
+        <h2 style="text-transform:capitalize">${formatDay(state.selectedDay)}</h2>
+        <button class="btn btn-primary btn-small" data-action="new-event">Ajouter</button>
+      </div>
+      ${renderHourlyDay(data, state.selectedDay)}
+    </section>`;
+}
+
+function renderEventFilters(data) {
+  const contacts = [...data.contacts].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const visible = eventsOn(data, state.selectedDay).length;
+  return `
+    <div class="event-filters">
+      <input class="search" id="event-search" placeholder="Filtrer par titre, lieu ou fiche" value="${escapeHtml(state.eventQuery)}" />
+      <div class="filters" aria-label="Type de fiche">
+        ${[["tous", "Toutes"], ["personne", "Personnes"], ["organisme", "Organismes"], ["sans", "Sans fiche"]].map(([key, label]) => `<button class="chip ${state.eventType === key ? "active" : ""}" data-event-type="${key}">${label}</button>`).join("")}
+      </div>
+      <div class="filters" aria-label="Plage de la journée">
+        ${[["toutes", "Journée"], ["matin", "Matin"], ["apres", "Après-midi"], ["soir", "Soir"]].map(([key, label]) => `<button class="chip ${state.eventBand === key ? "active" : ""}" data-event-band="${key}">${label}</button>`).join("")}
+      </div>
+      <div class="filters" aria-label="Catégorie">
+        ${[["toutes", "Toutes"], ["Événements", "Événements"], ["Rencontres", "Rencontres"]].map(([key, label]) => `<button class="chip ${state.eventCategory === key ? "active" : ""}" data-event-category="${key}">${label}</button>`).join("")}
+      </div>
+      <div class="filters" aria-label="Utilisateur">
+        <button class="chip ${state.eventOwnerId === "" ? "active" : ""}" data-event-owner="">Tous les utilisateurs</button>
+        ${knownUsers(data).map((user) => `<button class="chip ${state.eventOwnerId === user.id ? "active" : ""}" data-event-owner="${escapeHtml(user.id)}">${escapeHtml(user.nom)}</button>`).join("")}
+      </div>
+      <div class="field">
+        <label for="event-contact">Fiche</label>
+        <select id="event-contact">
+          <option value="">Toutes les fiches</option>
+          ${contacts.map((contact) => `<option value="${contact.id}" ${state.eventContactId === contact.id ? "selected" : ""}>${escapeHtml(contact.nom)}</option>`).join("")}
+        </select>
+      </div>
+      <p class="meta">${visible} rencontre${visible > 1 ? "s" : ""} affichée${visible > 1 ? "s" : ""} pour cette journée.</p>
     </div>`;
+}
+
+function renderMonth(data, selected) {
+  const month = startOfMonth(selected);
+  const days = calendarDays(month);
+  return `
+    <div class="weekdays">${["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((day) => `<span>${day}</span>`).join("")}</div>
+    <div class="days month-grid">
+      ${days.map((day) => {
+        const key = toDateKey(day.date);
+        const items = eventsOn(data, key);
+        return `<div class="day ${day.outside ? "muted" : ""} ${key === toDateKey(new Date()) ? "today" : ""} ${key === state.selectedDay ? "selected" : ""}" data-day="${key}">
+          <span class="day-num">${day.date.getDate()}</span>
+          <div class="day-events">
+            ${items.slice(0, 3).map((item) => `<button class="pill" data-event="${item.id}">${escapeHtml(rangeLabel(item))}</button>`).join("")}
+            ${items.length > 3 ? `<span class="more">+${items.length - 3}</span>` : ""}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`;
+}
+
+function renderWeek(data, selected) {
+  const days = weekDays(selected);
+  const hours = dayHours();
+  return `
+    <div class="week-board">
+      <div class="week-scale" aria-hidden="true">
+        <div class="week-scale-head"></div>
+        ${hours.map((hour) => `<span>${hourLabel(hour)}</span>`).join("")}
+      </div>
+      <div class="week-cols">
+        ${days.map((date) => {
+          const key = toDateKey(date);
+          const items = eventsOn(data, key);
+          return `<div class="week-col ${key === state.selectedDay ? "selected" : ""}">
+            <button class="week-head ${key === toDateKey(new Date()) ? "today" : ""}" data-day="${key}">
+              <small>${new Intl.DateTimeFormat("fr-CA", { weekday: "short" }).format(date)}</small>
+              <strong>${date.getDate()}</strong>
+            </button>
+            <div class="week-track">
+              ${hours.map((hour) => hourSlot(key, hour, items)).join("")}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
+function renderHourlyDay(data, key) {
+  const items = eventsOn(data, key);
+  return `<div class="hour-day">${dayHours().map((hour) => hourSlot(key, hour, items, true)).join("")}</div>`;
+}
+
+function hourSlot(dayKey, hour, items, detailed) {
+  const placed = items.filter((item) => eventTouchesHour(item, dayKey, hour));
+  return `<div class="hour-slot" data-day="${dayKey}">
+    <span class="slot-label">${hourLabel(hour)}</span>
+    <div class="slot-body">
+      ${placed.length ? placed.map((item) => eventInSlot(item, dayKey, hour, detailed)).join("") : `<span class="slot-empty">${hourLabel(hour)} – ${hourLabel(hour + 1)}</span>`}
+    </div>
+  </div>`;
+}
+
+function eventInSlot(item, dayKey, hour, detailed) {
+  const start = eventDate(item.debut);
+  const startsHere = toDateKey(start) === dayKey && start.getHours() === hour;
+  const range = rangeLabel(item);
+  if (!startsHere) {
+    return `<button class="slot-event continue" data-event="${item.id}">Suite · ${escapeHtml(range)} · ${escapeHtml(item.nom || item.titre)}</button>`;
+  }
+  return `<button class="slot-event" data-event="${item.id}">
+    <strong>${escapeHtml(range)}</strong>
+    <span>${escapeHtml(item.nom || item.titre)}${item.adresse ? " · " + escapeHtml(item.adresse) : ""}</span>
+  </button>`;
+}
+
+function eventTouchesHour(item, dayKey, hour) {
+  const start = eventDate(item.debut);
+  const end = eventDate(item.fin);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  const slotStart = new Date(`${dayKey}T${String(hour).padStart(2, "0")}:00:00`);
+  const slotEnd = new Date(slotStart.getTime() + 60 * 60000);
+  return start < slotEnd && end > slotStart;
+}
+
+function dayHours() {
+  return Array.from({ length: 14 }, (_, index) => index + 7);
+}
+
+function hourLabel(hour) {
+  return `${String(hour).padStart(2, "0")} h`;
+}
+
+function rangeLabel(item) {
+  const start = eventDate(item.debut);
+  const end = eventDate(item.fin);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "";
+  if (toDateKey(start) === toDateKey(end)) return `${shortTime(start)} – ${shortTime(end)}`;
+  const day = new Intl.DateTimeFormat("fr-CA", { day: "numeric", month: "short" });
+  return `${day.format(start)} ${shortTime(start)} – ${day.format(end)} ${shortTime(end)}`;
+}
+
+function eventDate(value) {
+  if (!value) return new Date(NaN);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return new Date(value);
+  return new Date(value);
+}
+
+function datePart(value) {
+  if (!value) return "";
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const date = eventDate(value);
+  return Number.isNaN(date.getTime()) ? "" : toDateKey(date);
 }
 
 function renderSettings() {
@@ -245,21 +396,159 @@ function renderSettings() {
         <button class="btn" data-action="ics">Exporter le calendrier</button>
       </div>
       <p class="meta">Les rappels s’affichent lorsque Carnet est ouvert, ou peu après une réouverture. Le rappel système fiable, application fermée, viendra avec la version Android connectée. En attendant, chaque rencontre peut être ajoutée au calendrier du téléphone.</p>
+      ${renderPartage()}
       <button class="btn-danger" data-action="reset">Effacer les données de cet appareil</button>
     </section>`;
+}
+
+function renderPartage() {
+  const profile = CarnetPartage.loadProfile();
+  return `
+    <div class="sheet" style="margin-top:8px">
+      <h2>Horaire partagé</h2>
+      <p class="meta">Le registre commun est le classeur Horaire partagé, dans le dossier Carnet. Chaque appareil garde une copie, puis fusionne un lot. En cas de conflit, la modification la plus récente l’emporte. Une suppression reste marquée pour être reprise par les autres.</p>
+      <div class="grid-2">
+        <div class="field"><label>Nom affiché</label><input id="share-nom" value="${escapeHtml(profile.nom)}" /></div>
+        <div class="field"><label>Courriel</label><input id="share-courriel" type="email" value="${escapeHtml(profile.courriel)}" /></div>
+      </div>
+      <div class="field"><label>Rôle</label>
+        <select id="share-role">
+          ${CarnetPartage.roles.map((role) => `<option value="${role}" ${profile.role === role ? "selected" : ""}>${role}</option>`).join("")}
+        </select>
+      </div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn btn-primary" data-action="share-save">Enregistrer le profil</button>
+        <button class="btn" data-action="share-export">Préparer un lot</button>
+        <button class="btn" data-action="share-import">Fusionner un lot</button>
+        <input id="share-file" type="file" accept="application/json" hidden />
+      </div>
+      <p class="meta">${CarnetPartage.canEdit(profile) ? "Ce profil peut modifier l’horaire." : "Ce profil consulte l’horaire, sans préparer de modification."}</p>
+    </div>`;
+}
+
+function eventCategories(data) {
+  return [...new Set(data.evenements.map((item) => String(item.categorie || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
+}
+
+function knownUsers(data) {
+  const map = new Map();
+  const profile = CarnetPartage.loadProfile();
+  if (profile.id) map.set(profile.id, { id: profile.id, nom: profile.nom || "Moi" });
+  for (const user of CarnetPartage.loadDirectory()) map.set(user.id, user);
+  for (const item of data.evenements) {
+    if (item.ownerId) map.set(item.ownerId, { id: item.ownerId, nom: item.ownerName || item.ownerId });
+  }
+  return [...map.values()].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+}
+
+function canSeeEvent(item) {
+  const profile = CarnetPartage.loadProfile();
+  if (profile.id && item.ownerId === profile.id) return true;
+  if (item.visibilite === "public") return true;
+  if (item.visibilite === "prive") return Boolean(profile.id) && (item.invites || []).includes(profile.id);
+  return false;
+}
+
+function visibilityLabel(value) {
+  return { public: "Public", prive: "Privé", personnel: "Personnel" }[value] || "";
+}
+
+function ownerLabel(item) {
+  return item.ownerName || "Compte non nommé";
+}
+
+function ownsEvent(item) {
+  const profile = CarnetPartage.loadProfile();
+  return Boolean(profile.id) && item.ownerId === profile.id;
 }
 
 function eventCard(item) {
   const data = load();
   return `
     <button class="event" data-event="${item.id}">
-      <strong>${escapeHtml(item.titre)}</strong>
-      <div class="meta">${formatDate(item.debut)} · ${escapeHtml(contactName(data, item.contactId))}${item.lieu ? " · " + escapeHtml(item.lieu) : ""}</div>
+      <strong>${escapeHtml(item.nom || item.titre)}</strong>
+      <div class="meta">${formatDate(item.debut)}${item.adresse ? " · " + escapeHtml(item.adresse) : ""}</div>
     </button>`;
 }
 
 function labelType(key) {
   return { tous: "Tous", personne: "Personnes", organisme: "Organismes" }[key];
+}
+
+function eventsOn(data, key) {
+  return data.evenements
+    .filter((item) => coversDay(item, key))
+    .filter((item) => canSeeEvent(item))
+    .filter((item) => matchesEventFilter(data, item))
+    .sort((a, b) => new Date(a.debut) - new Date(b.debut));
+}
+
+function coversDay(item, key) {
+  const start = eventDate(item.debut);
+  const end = eventDate(item.fin);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  const dayStart = new Date(`${key}T00:00:00`);
+  const dayEnd = new Date(`${key}T23:59:59`);
+  return start <= dayEnd && end >= dayStart;
+}
+
+function matchesEventFilter(data, item) {
+  const contact = data.contacts.find((entry) => entry.id === item.contactId);
+  if (state.eventType === "sans" && contact) return false;
+  if (state.eventType === "personne" && contact?.type !== "personne") return false;
+  if (state.eventType === "organisme" && contact?.type !== "organisme") return false;
+  if (state.eventCategory !== "toutes" && String(item.categorie || "").trim() !== state.eventCategory) return false;
+  if (state.eventOwnerId && item.ownerId !== state.eventOwnerId) return false;
+  if (!matchesBand(item, state.eventBand)) return false;
+  const q = state.eventQuery.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = [item.titre, item.lieu, item.notes, item.categorie, item.ownerName, contact?.nom, contact?.organisation].join(" ").toLowerCase();
+  return haystack.includes(q);
+}
+
+function matchesBand(item, band) {
+  if (band === "toutes") return true;
+  const ranges = { matin: [7, 12], apres: [12, 17], soir: [17, 21] };
+  const [from, to] = ranges[band];
+  const start = new Date(item.debut);
+  const end = item.fin ? new Date(item.fin) : new Date(start.getTime() + 60 * 60000);
+  const startMin = start.getHours() * 60 + start.getMinutes();
+  const endMin = Math.max(end.getHours() * 60 + end.getMinutes(), startMin + 30);
+  return startMin < to * 60 && endMin > from * 60;
+}
+
+function shortTime(value) {
+  return new Intl.DateTimeFormat("fr-CA", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function monthLabel(date) {
+  return new Intl.DateTimeFormat("fr-CA", { month: "long", year: "numeric" }).format(date);
+}
+
+function weekLabel(date) {
+  const days = weekDays(date);
+  const start = days[0];
+  const end = days[6];
+  const fmt = new Intl.DateTimeFormat("fr-CA", { day: "numeric", month: "short" });
+  return `${fmt.format(start)} – ${fmt.format(end)} ${end.getFullYear()}`;
+}
+
+function weekDays(date) {
+  const start = startOfWeek(date);
+  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+function startOfWeek(date) {
+  const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const offset = (copy.getDay() + 6) % 7;
+  copy.setDate(copy.getDate() - offset);
+  return copy;
+}
+
+function addDays(date, count) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + count);
+  return copy;
 }
 
 function calendarDays(month) {
@@ -274,9 +563,22 @@ function calendarDays(month) {
   });
 }
 
+function shiftCalendar(direction) {
+  const current = new Date(state.selectedDay + "T12:00:00");
+  const next = state.calendarMode === "semaine"
+    ? addDays(current, 7 * direction)
+    : new Date(current.getFullYear(), current.getMonth() + direction, 1);
+  state.selectedDay = toDateKey(next);
+  state.month = startOfMonth(next);
+  render();
+}
+
 function bind(data) {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.onclick = () => { state.view = button.dataset.view; render(); };
+  });
+  document.querySelectorAll("[data-contact-visibility]").forEach((button) => {
+    button.onclick = () => { state.contactVisibility = button.dataset.contactVisibility; render(); };
   });
   document.querySelectorAll("[data-filter]").forEach((button) => {
     button.onclick = () => { state.filter = button.dataset.filter; render(); };
@@ -295,8 +597,40 @@ function bind(data) {
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.onclick = () => handleAction(button.dataset.action, button.dataset.id || button.dataset.contact, data);
   });
-  document.querySelectorAll("[data-day]").forEach((button) => {
-    button.onclick = () => { state.selectedDay = button.dataset.day; render(); };
+  document.querySelectorAll("[data-cal]").forEach((button) => {
+    button.onclick = () => { state.calendarMode = button.dataset.cal; render(); };
+  });
+  document.querySelectorAll("[data-event-type]").forEach((button) => {
+    button.onclick = () => { state.eventType = button.dataset.eventType; render(); };
+  });
+  document.querySelectorAll("[data-event-band]").forEach((button) => {
+    button.onclick = () => { state.eventBand = button.dataset.eventBand; render(); };
+  });
+  document.querySelectorAll("[data-event-category]").forEach((button) => {
+    button.onclick = () => { state.eventCategory = button.dataset.eventCategory; render(); };
+  });
+  document.querySelectorAll("[data-event-owner]").forEach((button) => {
+    button.onclick = () => { state.eventOwnerId = button.dataset.eventOwner; render(); };
+  });
+  const eventSearch = document.querySelector("#event-search");
+  if (eventSearch) {
+    eventSearch.oninput = () => {
+      state.eventQuery = eventSearch.value;
+      const pos = eventSearch.selectionStart;
+      render();
+      const next = document.querySelector("#event-search");
+      if (next) { next.focus(); next.setSelectionRange(pos, pos); }
+    };
+  }
+  const eventContact = document.querySelector("#event-contact");
+  if (eventContact) eventContact.onchange = () => { state.eventContactId = eventContact.value; render(); };
+  document.querySelectorAll("[data-day]").forEach((node) => {
+    node.onclick = (event) => {
+      if (event.target.closest("[data-event]")) return;
+      state.selectedDay = node.dataset.day;
+      state.month = startOfMonth(new Date(state.selectedDay + "T12:00:00"));
+      render();
+    };
   });
 }
 
@@ -306,57 +640,91 @@ function handleAction(action, id, data) {
   if (action === "delete-contact") deleteContact(id);
   if (action === "add-suivi") addSuivi(id);
   if (action === "new-event") openEvent(null, id && data.contacts.some((item) => item.id === id) ? id : null);
-  if (action === "prev-month") { state.month = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1); render(); }
-  if (action === "next-month") { state.month = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 1); render(); }
+  if (action === "cal-prev") shiftCalendar(-1);
+  if (action === "cal-next") shiftCalendar(1);
+  if (action === "cal-today") {
+    state.selectedDay = toDateKey(new Date());
+    state.month = startOfMonth(new Date());
+    render();
+  }
   if (action === "notify") enableNotifications();
   if (action === "export") exportData();
   if (action === "import") document.querySelector("#import-file").click();
   if (action === "install") installApp();
   if (action === "ics") exportIcs();
-  if (action === "reset") resetData();
+  if (action === "share-save") saveShareProfile();
+  if (action === "share-export") exportShareLot();
+  if (action === "share-import") document.querySelector("#share-file").click();
   const file = document.querySelector("#import-file");
   if (file && !file.dataset.bound) {
     file.dataset.bound = "1";
     file.onchange = importData;
   }
+  const shareFile = document.querySelector("#share-file");
+  if (shareFile && !shareFile.dataset.bound) {
+    shareFile.dataset.bound = "1";
+    shareFile.onchange = importShareLot;
+  }
 }
 
 function openContact(contact) {
+  const data = load();
+  const profile = CarnetPartage.loadProfile();
+  const mine = !contact || ownsEvent(contact);
+  const lock = mine ? "" : "disabled";
   state.editingContact = contact || {
-    id: uid(), type: "personne", nom: "", fonction: "", organisation: "", courriel: "", telephone: "", ville: "", contexte: "", enjeux: "", engagements: "", notes: "", suivis: [], createdAt: new Date().toISOString()
+    id: uid(), nom: "", telephone: "", courriel: "", adresse: "", organisme: "", notes: "", invites: [], ownerId: profile.id, ownerName: profile.nom, createdAt: new Date().toISOString()
   };
   const item = state.editingContact;
   openModal(`
     <form id="contact-form" class="sheet">
       <h2>${contact ? "Modifier la fiche" : "Nouvelle fiche"}</h2>
+      <div class="field"><label>Nom</label><input name="nom" required value="${escapeHtml(item.nom)}" ${lock} /></div>
       <div class="grid-2">
-        <div class="field"><label>Type</label><select name="type"><option value="personne" ${item.type === "personne" ? "selected" : ""}>Personne</option><option value="organisme" ${item.type === "organisme" ? "selected" : ""}>Organisme</option></select></div>
-        <div class="field"><label>Ville</label><input name="ville" value="${escapeHtml(item.ville)}" /></div>
+        <div class="field"><label>No de téléphone</label><input name="telephone" value="${escapeHtml(item.telephone)}" ${lock} /></div>
+        <div class="field"><label>Adresse courriel</label><input name="courriel" type="email" value="${escapeHtml(item.courriel)}" ${lock} /></div>
       </div>
-      <div class="field"><label>Nom</label><input name="nom" required value="${escapeHtml(item.nom)}" /></div>
-      <div class="grid-2">
-        <div class="field"><label>Fonction</label><input name="fonction" value="${escapeHtml(item.fonction)}" /></div>
-        <div class="field"><label>Organisation</label><input name="organisation" value="${escapeHtml(item.organisation)}" /></div>
+      <div class="field"><label>Adresse complète</label><textarea name="adresse" ${lock}>${escapeHtml(item.adresse)}</textarea></div>
+      <div class="field"><label>Catégorie</label>
+        <select name="categorie" ${lock}>
+          <option value="">Choisir</option>
+          <option value="Contacts" ${item.categorie === "Contacts" ? "selected" : ""}>Contacts</option>
+          <option value="Organismes" ${item.categorie === "Organismes" ? "selected" : ""}>Organismes</option>
+        </select>
       </div>
-      <div class="grid-2">
-        <div class="field"><label>Téléphone</label><input name="telephone" value="${escapeHtml(item.telephone)}" /></div>
-        <div class="field"><label>Courriel</label><input name="courriel" type="email" value="${escapeHtml(item.courriel)}" /></div>
+      <div class="field"><label>Organisme associé</label><input name="organisme" value="${escapeHtml(item.organisme)}" ${lock} /></div>
+      <div class="field"><label>Visibilité</label>
+        <select name="visibilite" required ${lock}>
+          <option value="">Choisir</option>
+          <option value="public" ${item.visibilite === "public" ? "selected" : ""}>Public — visible par tous</option>
+          <option value="prive" ${item.visibilite === "prive" ? "selected" : ""}>Privé — visible pour les utilisateurs invités</option>
+          <option value="personnel" ${item.visibilite === "personnel" ? "selected" : ""}>Personnel — utilisateur seulement</option>
+        </select>
       </div>
-      <div class="field"><label>Contexte</label><textarea name="contexte">${escapeHtml(item.contexte)}</textarea></div>
-      <div class="field"><label>Enjeux et points à aborder</label><textarea name="enjeux">${escapeHtml(item.enjeux)}</textarea></div>
-      <div class="field"><label>Engagements</label><textarea name="engagements">${escapeHtml(item.engagements)}</textarea></div>
-      <div class="field"><label>Notes</label><textarea name="notes">${escapeHtml(item.notes)}</textarea></div>
+      <div class="field"><label>Utilisateurs invités</label>
+        <select name="invites" multiple ${lock} size="4">
+          ${knownUsers(data).filter((user) => user.id !== profile.id).map((user) => `<option value="${escapeHtml(user.id)}" ${(item.invites || []).includes(user.id) ? "selected" : ""}>${escapeHtml(user.nom)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Notes</label><textarea name="notes" ${lock}>${escapeHtml(item.notes)}</textarea></div>
       <div class="row">
-        <button class="btn btn-primary" type="submit">Enregistrer</button>
-        <button class="btn-ghost" type="button" data-close>Annuler</button>
+        ${mine ? `<button class="btn btn-primary" type="submit">Enregistrer</button>` : ""}
+        <button class="btn-ghost" type="button" data-close>Fermer</button>
       </div>
     </form>`);
   document.querySelector("#contact-form").onsubmit = (event) => {
     event.preventDefault();
     const form = new FormData(event.target);
+    const visibilite = String(form.get("visibilite") || "");
+    if (!profile.id) { toast("Enregistrez d’abord votre profil dans Réglages."); return; }
+    if (!["public", "prive", "personnel"].includes(visibilite)) { toast("Choisissez Public, Privé ou Personnel."); return; }
+    if (state.editingContact.ownerId && state.editingContact.ownerId !== profile.id) { toast("Seul le compte propriétaire peut modifier ce contact."); return; }
     const data = load();
-    const next = { ...state.editingContact, updatedAt: new Date().toISOString() };
-    for (const key of ["type", "nom", "fonction", "organisation", "courriel", "telephone", "ville", "contexte", "enjeux", "engagements", "notes"]) next[key] = String(form.get(key) || "").trim();
+    const next = { ...state.editingContact, updatedAt: new Date().toISOString(), ownerId: profile.id, ownerName: profile.nom || profile.courriel || "Compte" };
+    for (const key of ["nom", "telephone", "courriel", "adresse", "organisme", "notes"]) next[key] = String(form.get(key) || "").trim();
+    next.visibilite = visibilite;
+    next.categorie = ["Contacts", "Organismes"].includes(String(form.get("categorie") || "")) ? String(form.get("categorie")) : "";
+    next.invites = visibilite === "prive" ? form.getAll("invites") : [];
     const index = data.contacts.findIndex((entry) => entry.id === next.id);
     if (index >= 0) data.contacts[index] = next; else data.contacts.push(next);
     save(data);
@@ -371,31 +739,53 @@ function openContact(contact) {
 function openEvent(eventItem, contactId) {
   const data = load();
   const baseDay = state.selectedDay || toDateKey(new Date());
+  const profile = CarnetPartage.loadProfile();
+  const mine = !eventItem || ownsEvent(eventItem);
   state.editingEvent = eventItem || {
-    id: uid(), titre: "", contactId: contactId || state.selectedContactId || "", debut: `${baseDay}T09:00`, fin: `${baseDay}T10:00`, lieu: "", notes: "", rappelMinutes: 60
+    id: uid(), nom: "", debut: "", fin: "", adresse: "", invites: [], notes: "", ownerId: profile.id, ownerName: profile.nom
   };
   const item = state.editingEvent;
+  const lock = mine ? "" : "disabled";
   openModal(`
     <form id="event-form" class="sheet">
-      <h2>${eventItem ? "Modifier la rencontre" : "Nouvelle rencontre"}</h2>
-      <div class="field"><label>Titre</label><input name="titre" required value="${escapeHtml(item.titre)}" /></div>
-      <div class="field"><label>Fiche liée</label>
-        <select name="contactId"><option value="">Aucune</option>${data.contacts.map((contact) => `<option value="${contact.id}" ${contact.id === item.contactId ? "selected" : ""}>${escapeHtml(contact.nom)}</option>`).join("")}</select>
+      <h2>${eventItem ? "Modifier l’événement" : "Nouvel événement"}</h2>
+      <p class="meta">Jour sélectionné : ${escapeHtml(formatDay(baseDay))}. Propriétaire : ${escapeHtml(item.ownerName || profile.nom || "profil à enregistrer")}.</p>
+      <div class="field"><label>Nom</label><input name="nom" required value="${escapeHtml(item.nom || item.titre || "")}" ${lock} /></div>
+        <div class="field"><label>Catégorie</label>
+          <select name="categorie" required ${lock}>
+            <option value="">Choisir</option>
+            <option value="Événements" ${item.categorie === "Événements" ? "selected" : ""}>Événements</option>
+            <option value="Rencontres" ${item.categorie === "Rencontres" ? "selected" : ""}>Rencontres</option>
+          </select>
+        </div>
+      <div class="grid-2">
+        <div class="field"><label>Date de début</label><input name="dateDebut" type="date" required value="${datePart(item.debut) || baseDay}" ${lock} /></div>
+        <div class="field"><label>Heure de début</label><input name="heureDebut" type="time" required value="${timePart(item.debut)}" ${lock} /></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label>Début</label><input name="debut" type="datetime-local" required value="${toLocalInput(item.debut)}" /></div>
-        <div class="field"><label>Fin</label><input name="fin" type="datetime-local" value="${toLocalInput(item.fin)}" /></div>
+        <div class="field"><label>Date de fin</label><input name="dateFin" type="date" required value="${datePart(item.fin)}" ${lock} /></div>
+        <div class="field"><label>Heure de fin</label><input name="heureFin" type="time" required value="${timePart(item.fin)}" ${lock} /></div>
       </div>
-      <div class="grid-2">
-        <div class="field"><label>Lieu</label><input name="lieu" value="${escapeHtml(item.lieu)}" /></div>
-        <div class="field"><label>Rappel (minutes avant)</label><input name="rappelMinutes" type="number" min="0" step="5" value="${item.rappelMinutes ?? 60}" /></div>
+      <div class="field"><label>Adresse</label><input name="adresse" value="${escapeHtml(item.adresse || item.lieu || "")}" ${lock} /></div>
+      <div class="field"><label>Visibilité</label>
+        <select name="visibilite" required ${lock}>
+          <option value="">Choisir</option>
+          <option value="public" ${item.visibilite === "public" ? "selected" : ""}>Public — visible par tous</option>
+          <option value="prive" ${item.visibilite === "prive" ? "selected" : ""}>Privé — visible pour les utilisateurs invités</option>
+          <option value="personnel" ${item.visibilite === "personnel" ? "selected" : ""}>Personnel — utilisateur seulement</option>
+        </select>
       </div>
-      <div class="field"><label>Notes de rencontre</label><textarea name="notes">${escapeHtml(item.notes)}</textarea></div>
+      <div class="field"><label>Utilisateurs invités</label>
+        <select name="invites" multiple ${lock} size="4">
+          ${knownUsers(data).filter((user) => user.id !== profile.id).map((user) => `<option value="${escapeHtml(user.id)}" ${(item.invites || []).includes(user.id) ? "selected" : ""}>${escapeHtml(user.nom)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Notes</label><textarea name="notes" ${lock}>${escapeHtml(item.notes)}</textarea></div>
       <div class="row" style="flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit">Enregistrer</button>
+        ${mine ? `<button class="btn btn-primary" type="submit">Enregistrer</button>` : ""}
         <button class="btn" type="button" data-action="one-ics">Ajouter au calendrier du téléphone</button>
-        ${eventItem ? `<button class="btn-danger" type="button" data-action="delete-event">Retirer</button>` : ""}
-        <button class="btn-ghost" type="button" data-close>Annuler</button>
+        ${eventItem && mine ? `<button class="btn-danger" type="button" data-action="delete-event">Retirer</button>` : ""}
+        <button class="btn-ghost" type="button" data-close>Fermer</button>
       </div>
     </form>`);
   document.querySelector("#event-form").onsubmit = (event) => { event.preventDefault(); persistEvent(new FormData(event.target)); };
@@ -411,32 +801,75 @@ function openEvent(eventItem, contactId) {
   };
 }
 
+function timePart(value) {
+  if (!value) return "";
+  const match = String(value).match(/T(\d{2}:\d{2})/);
+  if (match) return match[1];
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function combineDayTime(day, time) {
+  if (!day || !time) return "";
+  return `${day}T${time}`;
+}
+
 function readEventForm() {
   const form = new FormData(document.querySelector("#event-form"));
+  const day = state.selectedDay;
+  const nom = String(form.get("nom") || "").trim();
+  const visibilite = String(form.get("visibilite") || "");
   return {
     ...state.editingEvent,
-    titre: String(form.get("titre") || "").trim(),
-    contactId: String(form.get("contactId") || ""),
-    debut: String(form.get("debut") || ""),
-    fin: String(form.get("fin") || ""),
-    lieu: String(form.get("lieu") || "").trim(),
+    nom,
+    titre: nom,
+    debut: combineDayTime(String(form.get("dateDebut") || ""), String(form.get("heureDebut") || "")),
+    fin: combineDayTime(String(form.get("dateFin") || ""), String(form.get("heureFin") || "")),
+    adresse: String(form.get("adresse") || "").trim(),
     notes: String(form.get("notes") || "").trim(),
-    rappelMinutes: Number(form.get("rappelMinutes") || 0)
+    categorie: ["Événements", "Rencontres"].includes(String(form.get("categorie") || "")) ? String(form.get("categorie")) : "",
+    invites: visibilite === "prive" ? form.getAll("invites") : []
   };
 }
 
 function persistEvent(form) {
+  const profile = CarnetPartage.loadProfile();
+  if (!profile.id) {
+    toast("Enregistrez d’abord votre profil dans Réglages.");
+    return;
+  }
+  if (!["public", "prive", "personnel"].includes(String(form.get("visibilite") || ""))) {
+    toast("Choisissez Public, Privé ou Personnel.");
+    return;
+  }
+  const debut = combineDayTime(String(form.get("dateDebut") || ""), String(form.get("heureDebut") || ""));
+  const fin = combineDayTime(String(form.get("dateFin") || ""), String(form.get("heureFin") || ""));
+  if (!(eventDate(fin) > eventDate(debut))) {
+    toast("La fin doit être après le début.");
+    return;
+  }
+  if (state.editingEvent.ownerId && state.editingEvent.ownerId !== profile.id) {
+    toast("Seul le compte propriétaire peut modifier cet événement.");
+    return;
+  }
+  const visibilite = String(form.get("visibilite") || "");
+  const nom = String(form.get("nom") || "").trim();
   const data = load();
   const next = {
     ...state.editingEvent,
-    titre: String(form.get("titre") || "").trim(),
-    contactId: String(form.get("contactId") || ""),
-    debut: String(form.get("debut") || ""),
-    fin: String(form.get("fin") || ""),
-    lieu: String(form.get("lieu") || "").trim(),
+    nom,
+    titre: nom,
+    debut,
+    fin,
+    adresse: String(form.get("adresse") || "").trim(),
     notes: String(form.get("notes") || "").trim(),
-    rappelMinutes: Number(form.get("rappelMinutes") || 0),
-    updatedAt: new Date().toISOString()
+    categorie: ["Événements", "Rencontres"].includes(String(form.get("categorie") || "")) ? String(form.get("categorie")) : "",
+    invites: visibilite === "prive" ? form.getAll("invites") : [],
+    ownerId: profile.id,
+    ownerName: profile.nom || profile.courriel || "Compte",
+    updatedAt: new Date().toISOString(),
+    updatedBy: profile.id
   };
   const index = data.evenements.findIndex((entry) => entry.id === next.id);
   if (index >= 0) data.evenements[index] = next; else data.evenements.push(next);
@@ -480,6 +913,55 @@ function deleteContact(id) {
   render();
 }
 
+function saveShareProfile() {
+  const profile = CarnetPartage.loadProfile();
+  profile.nom = document.querySelector("#share-nom").value.trim();
+  profile.courriel = document.querySelector("#share-courriel").value.trim();
+  profile.role = document.querySelector("#share-role").value;
+  if (!profile.id) profile.id = "u-" + uid();
+  CarnetPartage.saveProfile(profile);
+  CarnetPartage.rememberUser(profile);
+  toast("Profil partagé enregistré.");
+  render();
+}
+
+function stampAuthor(item) {
+  const profile = CarnetPartage.loadProfile();
+  item.updatedAt = new Date().toISOString();
+  item.updatedBy = profile.id || profile.nom || "local";
+  return item;
+}
+
+function exportShareLot() {
+  const profile = CarnetPartage.loadProfile();
+  if (!CarnetPartage.canEdit(profile)) {
+    toast("Ce rôle ne prépare pas de modification.");
+    return;
+  }
+  const blob = new Blob([JSON.stringify(CarnetPartage.lotFrom(load(), profile), null, 2)], { type: "application/json" });
+  download(blob, `horaire-partage-${toDateKey(new Date())}.json`);
+}
+
+function importShareLot(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const incoming = JSON.parse(reader.result);
+      if (incoming.format !== "carnet-horaire-1") throw new Error("format");
+      const merged = CarnetPartage.merge(load(), incoming);
+      CarnetPartage.rememberUsers(incoming.utilisateurs);
+      save({ contacts: merged.contacts, evenements: merged.evenements });
+      toast("Horaire fusionné.");
+      render();
+    } catch {
+      toast("Lot inutilisable.");
+    }
+  };
+  reader.readAsText(file);
+}
+
 function exportData() {
   const blob = new Blob([JSON.stringify(load(), null, 2)], { type: "application/json" });
   download(blob, `carnet-${toDateKey(new Date())}.json`);
@@ -513,8 +995,8 @@ function downloadIcs(events) {
   events.filter((item) => item.titre && item.debut).forEach((item) => {
     lines.push("BEGIN:VEVENT", `UID:${item.id}@carnet`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(new Date(item.debut))}`);
     if (item.fin) lines.push(`DTEND:${icsDate(new Date(item.fin))}`);
-    lines.push(`SUMMARY:${escapeIcs(item.titre)}`);
-    if (item.lieu) lines.push(`LOCATION:${escapeIcs(item.lieu)}`);
+    lines.push(`SUMMARY:${escapeIcs(item.nom || item.titre)}`);
+    if (item.adresse || item.lieu) lines.push(`LOCATION:${escapeIcs(item.adresse || item.lieu)}`);
     if (item.notes) lines.push(`DESCRIPTION:${escapeIcs(item.notes)}`);
     lines.push("END:VEVENT");
   });
@@ -608,6 +1090,10 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
 
+setInterval(checkReminders, 30000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkReminders(); });
+render();
+checkReminders();
 setInterval(checkReminders, 30000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkReminders(); });
 render();

@@ -9,12 +9,17 @@ const state = {
   selectedDay: toDateKey(new Date()),
   calendarMode: "mois",
   eventQuery: "",
-  eventType: "tous",
-  eventContactId: "",
-  eventBand: "toutes",
-  eventCategory: "toutes",
-  eventOwnerId: "",
-  contactVisibility: "tous",
+  eventType: [],
+  eventContactId: [],
+  eventBand: [],
+  eventCategory: [],
+  eventOwnerId: [],
+  eventPeriod: "7",
+  eventStatut: "actifs",
+  eventLieu: "tous",
+  eventSuivi: "tous",
+  contactVisibility: [],
+  contactCategory: [],
   editingContact: null,
   editingEvent: null,
   openFilters: { fiches: false, agenda: false }
@@ -235,9 +240,35 @@ function renderAgenda(data) {
 
 function renderEventFilters(data) {
   const contacts = [...data.contacts].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
-  const visible = eventsOn(data, state.selectedDay).length;
+  const windowItems = data.evenements.filter((item) => canSeeEvent(item) && matchesPeriod(item));
+  const visible = windowItems.filter((item) => matchesEventFilter(data, item)).length;
+  const chip = (attr, key, label, current) => `<button class="chip ${current === key ? "active" : ""}" ${attr}="${key}">${label}</button>`;
   return `
     <div class="event-filters">
+      <div class="filter-row">
+        <span class="filter-label">Période</span>
+        <div class="filters" aria-label="Période">
+          ${[["jour", "Aujourd’hui"], ["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"], ["tous", "Tout"]].map(([key, label]) => chip("data-event-period", key, label, state.eventPeriod)).join("")}
+        </div>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Statut</span>
+        <div class="filters" aria-label="Statut">
+          ${[["actifs", "Actifs"], ["a-venir", "À venir"], ["en-cours", "En cours"], ["tenue", "Tenue"], ["reportee", "Reportée"], ["annulee", "Annulée"], ["tous", "Tous"]].map(([key, label]) => chip("data-event-statut", key, label, state.eventStatut)).join("")}
+        </div>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Suivi</span>
+        <div class="filters" aria-label="Suivi">
+          ${[["tous", "Tous"], ["ouvert", "Action ouverte"], ["sans", "Sans action"], ["retard", "En retard"]].map(([key, label]) => chip("data-event-suivi", key, label, state.eventSuivi)).join("")}
+        </div>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Lieu</span>
+        <div class="filters" aria-label="Lieu">
+          ${[["tous", "Tous"], ["avec", "Avec lieu"], ["sans", "Sans lieu"]].map(([key, label]) => chip("data-event-lieu", key, label, state.eventLieu)).join("")}
+        </div>
+      </div>
       <input class="search" id="event-search" placeholder="Filtrer par titre, lieu ou fiche" value="${escapeHtml(state.eventQuery)}" />
       ${filterPanel("agenda", [
         ["Type de fiche", "event-type", [["personne", "Personnes"], ["organisme", "Organismes"], ["sans", "Sans fiche"]], state.eventType],
@@ -246,7 +277,10 @@ function renderEventFilters(data) {
         ["Utilisateur", "event-owner", knownUsers(data).map((user) => [user.id, user.nom]), state.eventOwnerId],
         ["Fiche", "event-contact", contacts.map((contact) => [contact.id, contact.nom]), state.eventContactId]
       ])}
-      <p class="meta">${visible} rencontre${visible > 1 ? "s" : ""} affichée${visible > 1 ? "s" : ""} pour cette journée.</p>
+      <div class="spread">
+        <p class="meta">${visible} / ${windowItems.length} dans la période.</p>
+        <button class="btn-ghost btn-small" data-event-reset>Réinitialiser</button>
+      </div>
     </div>`;
 }
 
@@ -477,9 +511,13 @@ function coversDay(item, key) {
 }
 
 function matchesEventFilter(data, item) {
+  if (!matchesPeriod(item)) return false;
+  if (!matchesStatut(item)) return false;
+  if (!matchesSuivi(item)) return false;
+  if (!matchesLieu(item)) return false;
   const contact = data.contacts.find((entry) => entry.id === item.contactId);
   if (state.eventType.length) {
-    const kind = !contact ? "sans" : contact.type === "organisme" ? "organisme" : contact.type === "personne" ? "personne" : "";
+    const kind = !contact ? "sans" : contact.type === "organisme" || contact.categorie === "Organismes" ? "organisme" : contact.type === "personne" || contact.categorie === "Contacts" ? "personne" : "";
     if (!state.eventType.includes(kind)) return false;
   }
   if (state.eventCategory.length && !state.eventCategory.includes(String(item.categorie || "").trim())) return false;
@@ -488,8 +526,76 @@ function matchesEventFilter(data, item) {
   if (state.eventBand.length && !state.eventBand.some((band) => matchesBand(item, band))) return false;
   const q = state.eventQuery.trim().toLowerCase();
   if (!q) return true;
-  const haystack = [item.titre, item.lieu, item.notes, item.categorie, item.ownerName, contact?.nom, contact?.organisation].join(" ").toLowerCase();
+  const haystack = [item.titre, item.nom, item.lieu, item.adresse, item.notes, item.categorie, item.ownerName, contact?.nom, contact?.organisme].join(" ").toLowerCase();
   return haystack.includes(q);
+}
+
+function periodWindow() {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (state.eventPeriod === "tous") return null;
+  if (state.eventPeriod === "jour") return [start, new Date(start.getFullYear(), start.getMonth(), start.getDate(), 23, 59, 59)];
+  if (state.eventPeriod === "7") return [start, new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59)];
+  if (state.eventPeriod === "30") return [start, new Date(start.getFullYear(), start.getMonth(), start.getDate() + 29, 23, 59, 59)];
+  const month = startOfMonth(new Date(state.selectedDay + "T12:00:00"));
+  return [month, new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59)];
+}
+
+function matchesPeriod(item) {
+  const window = periodWindow();
+  if (!window) return true;
+  const start = eventDate(item.debut);
+  const end = eventDate(item.fin);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  return start <= window[1] && end >= window[0];
+}
+
+function eventStatut(item) {
+  if (item.statut === "annulee" || item.statut === "reportee") return item.statut;
+  const now = Date.now();
+  const start = eventDate(item.debut).getTime();
+  const end = eventDate(item.fin).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end)) return "a-venir";
+  if (item.statut === "tenue" || now > end) return "tenue";
+  if (now >= start && now <= end) return "en-cours";
+  return "a-venir";
+}
+
+function matchesStatut(item) {
+  const statut = eventStatut(item);
+  if (state.eventStatut === "tous") return true;
+  if (state.eventStatut === "actifs") return statut === "a-venir" || statut === "en-cours";
+  return statut === state.eventStatut;
+}
+
+function matchesSuivi(item) {
+  const open = Boolean(item.suiviOuvert);
+  if (state.eventSuivi === "tous") return true;
+  if (state.eventSuivi === "ouvert") return open;
+  if (state.eventSuivi === "sans") return !open;
+  if (!open || !item.suiviEcheance) return false;
+  return item.suiviEcheance < toDateKey(new Date());
+}
+
+function matchesLieu(item) {
+  const has = Boolean(String(item.adresse || item.lieu || "").trim());
+  if (state.eventLieu === "avec") return has;
+  if (state.eventLieu === "sans") return !has;
+  return true;
+}
+
+function resetEventFilters() {
+  state.eventPeriod = "7";
+  state.eventStatut = "actifs";
+  state.eventSuivi = "tous";
+  state.eventLieu = "tous";
+  state.eventType = [];
+  state.eventBand = [];
+  state.eventCategory = [];
+  state.eventOwnerId = [];
+  state.eventContactId = [];
+  state.eventQuery = "";
+  render();
 }
 
 function matchesBand(item, band) {
@@ -617,6 +723,20 @@ function bind(data) {
   bindMulti("#event-category", "eventCategory");
   bindMulti("#event-owner", "eventOwnerId");
   bindMulti("#event-contact", "eventContactId");
+  document.querySelectorAll("[data-event-period]").forEach((button) => {
+    button.onclick = () => { state.eventPeriod = button.dataset.eventPeriod; render(); };
+  });
+  document.querySelectorAll("[data-event-statut]").forEach((button) => {
+    button.onclick = () => { state.eventStatut = button.dataset.eventStatut; render(); };
+  });
+  document.querySelectorAll("[data-event-suivi]").forEach((button) => {
+    button.onclick = () => { state.eventSuivi = button.dataset.eventSuivi; render(); };
+  });
+  document.querySelectorAll("[data-event-lieu]").forEach((button) => {
+    button.onclick = () => { state.eventLieu = button.dataset.eventLieu; render(); };
+  });
+  const resetFilters = document.querySelector("[data-event-reset]");
+  if (resetFilters) resetFilters.onclick = resetEventFilters;
   const eventSearch = document.querySelector("#event-search");
   if (eventSearch) {
     eventSearch.oninput = () => {
@@ -771,6 +891,26 @@ function openEvent(eventItem, contactId) {
         <div class="field"><label>Heure de fin</label><input name="heureFin" type="time" required value="${timePart(item.fin)}" ${lock} /></div>
       </div>
       <div class="field"><label>Adresse</label><input name="adresse" value="${escapeHtml(item.adresse || item.lieu || "")}" ${lock} /></div>
+      <div class="grid-2">
+        <div class="field"><label>Statut forcé</label>
+          <select name="statut" ${lock}>
+            <option value="">Dérivé des dates</option>
+            <option value="reportee" ${item.statut === "reportee" ? "selected" : ""}>Reportée</option>
+            <option value="annulee" ${item.statut === "annulee" ? "selected" : ""}>Annulée</option>
+            <option value="tenue" ${item.statut === "tenue" ? "selected" : ""}>Tenue</option>
+          </select>
+        </div>
+        <div class="field"><label>Fiche liée</label>
+          <select name="contactId" ${lock}>
+            <option value="">Sans fiche</option>
+            ${data.contacts.filter((entry) => canSeeEvent(entry)).sort((a, b) => a.nom.localeCompare(b.nom, "fr")).map((entry) => `<option value="${entry.id}" ${item.contactId === entry.id ? "selected" : ""}>${escapeHtml(entry.nom)}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Action ouverte</label><input name="suiviOuvert" type="checkbox" ${item.suiviOuvert ? "checked" : ""} ${lock} /></div>
+        <div class="field"><label>Échéance de l’action</label><input name="suiviEcheance" type="date" value="${escapeHtml(item.suiviEcheance || "")}" ${lock} /></div>
+      </div>
       <div class="field"><label>Visibilité</label>
         <select name="visibilite" required ${lock}>
           <option value="">Choisir</option>
@@ -831,8 +971,14 @@ function readEventForm() {
     debut: combineDayTime(String(form.get("dateDebut") || ""), String(form.get("heureDebut") || "")),
     fin: combineDayTime(String(form.get("dateFin") || ""), String(form.get("heureFin") || "")),
     adresse: String(form.get("adresse") || "").trim(),
+    lieu: String(form.get("adresse") || "").trim(),
     notes: String(form.get("notes") || "").trim(),
     categorie: ["Événements", "Rencontres"].includes(String(form.get("categorie") || "")) ? String(form.get("categorie")) : "",
+    statut: ["reportee", "annulee", "tenue"].includes(String(form.get("statut") || "")) ? String(form.get("statut")) : "",
+    contactId: String(form.get("contactId") || ""),
+    suiviOuvert: form.get("suiviOuvert") === "on",
+    suiviEcheance: String(form.get("suiviEcheance") || ""),
+    visibilite,
     invites: visibilite === "prive" ? form.getAll("invites") : []
   };
 }
@@ -867,8 +1013,14 @@ function persistEvent(form) {
     debut,
     fin,
     adresse: String(form.get("adresse") || "").trim(),
+    lieu: String(form.get("adresse") || "").trim(),
     notes: String(form.get("notes") || "").trim(),
     categorie: ["Événements", "Rencontres"].includes(String(form.get("categorie") || "")) ? String(form.get("categorie")) : "",
+    statut: ["reportee", "annulee", "tenue"].includes(String(form.get("statut") || "")) ? String(form.get("statut")) : "",
+    contactId: String(form.get("contactId") || ""),
+    suiviOuvert: form.get("suiviOuvert") === "on",
+    suiviEcheance: String(form.get("suiviEcheance") || ""),
+    visibilite,
     invites: visibilite === "prive" ? form.getAll("invites") : [],
     ownerId: profile.id,
     ownerName: profile.nom || profile.courriel || "Compte",

@@ -220,10 +220,10 @@ function renderAgenda(data) {
           <button class="chip ${state.calendarMode === "mois" ? "active" : ""}" data-cal="mois">Mois</button>
         </div>
         <div class="cal-nav">
-          <button class="btn-ghost btn-small" data-action="cal-prev" aria-label="Période précédente">Précédent</button>
+          <button class="btn-ghost btn-small icon-btn" data-action="cal-prev" aria-label="Période précédente">‹</button>
           <h2>${escapeHtml(label)}</h2>
-          <button class="btn-ghost btn-small" data-action="cal-next" aria-label="Période suivante">Suivant</button>
-          <button class="btn-ghost btn-small" data-action="cal-today">Aujourd’hui</button>
+          <button class="btn-ghost btn-small icon-btn" data-action="cal-next" aria-label="Période suivante">›</button>
+          <button class="btn-ghost btn-small" data-action="cal-today" aria-label="Revenir à aujourd’hui">Auj.</button>
         </div>
       </div>
       ${renderEventFilters(data)}
@@ -247,16 +247,16 @@ function renderEventFilters(data) {
     <div class="event-filters">
       <div class="filter-row quick-filters">
         <div class="filters" aria-label="Raccourcis">
-          ${chip("data-event-period", "jour", "Aujourd’hui", state.eventPeriod === "jour")}
+          ${chip("data-event-period", "jour", "Jour", state.eventPeriod === "jour")}
           ${chip("data-event-period", "7", "7 jours", state.eventPeriod === "7")}
           ${chip("data-event-statut", "actifs", "Actifs", state.eventStatut === "actifs")}
-          ${chip("data-event-suivi", "retard", "En retard", state.eventSuivi === "retard")}
+          ${chip("data-event-suivi", "retard", "Retard", state.eventSuivi === "retard")}
           <button class="chip ${state.openFilters.agenda ? "active" : ""}" data-filter-toggle="agenda">Filtres</button>
         </div>
       </div>
       <input class="search" id="event-search" placeholder="Titre, lieu ou fiche" value="${escapeHtml(state.eventQuery)}" />
       ${filterPanel("agenda", [
-        ["Période", "event-period", [["jour", "Aujourd’hui"], ["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"], ["tous", "Tout"]], [state.eventPeriod]],
+        ["Période", "event-period", [["jour", "Jour"], ["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"], ["tous", "Tout"]], [state.eventPeriod]],
         ["Statut", "event-statut", [["actifs", "Actifs"], ["a-venir", "À venir"], ["en-cours", "En cours"], ["tenue", "Tenue"], ["reportee", "Reportée"], ["annulee", "Annulée"], ["tous", "Tous"]], [state.eventStatut]],
         ["Suivi", "event-suivi", [["tous", "Tous"], ["ouvert", "Action ouverte"], ["sans", "Sans action"], ["retard", "En retard"]], [state.eventSuivi]],
         ["Lieu", "event-lieu", [["tous", "Tous"], ["avec", "Avec lieu"], ["sans", "Sans lieu"]], [state.eventLieu]],

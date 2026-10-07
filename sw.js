@@ -1,4 +1,4 @@
-const CACHE = "carnet-v18";
+const CACHE = "carnet-v19";
 const ASSETS = [
   "./",
   "./index.html",

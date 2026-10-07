@@ -1,9 +1,8 @@
-const CACHE = "carnet-v13";
+const CACHE = "carnet-v1";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./partage.js",
   "./app.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",

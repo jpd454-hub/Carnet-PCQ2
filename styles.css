@@ -58,17 +58,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .brand { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .mark {
-  height: 32px; min-width: 32px; padding: 0 8px; border-radius: 10px; flex: 0 0 auto;
-  background: var(--brand);
-  border: 1px solid rgba(11, 183, 222, 0.55);
-  display: grid; place-items: center;
-  color: #FFFFFF; font-family: var(--font); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.04em; white-space: nowrap;
+  height: 32px; margin: 0; flex: 0 0 auto;
+  background: transparent; border: 0; padding: 0;
+  display: flex; align-items: center;
 }
-.brand h1 {
-  margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 500;
-  border-bottom: 2px solid var(--red); display: inline-block; line-height: 1.15;
-}
+.mark img { height: 32px; width: auto; max-width: 148px; display: block; }
 .brand p { display: none; }
 .top-actions { display: flex; gap: 8px; flex-wrap: nowrap; }
 .top-actions .btn { min-height: 44px; }

@@ -1,4 +1,4 @@
-const CACHE = "carnet-v25";
+const CACHE = "carnet-v26";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,7 +8,8 @@ const ASSETS = [
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
-  "./apple-touch-icon.png"
+  "./apple-touch-icon.png",
+  "./logo-pcq.svg"
 ];
 
 self.addEventListener("install", (event) => {

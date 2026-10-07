@@ -58,11 +58,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .brand { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .mark {
-  width: 32px; height: 32px; border-radius: 10px; flex: 0 0 32px;
+  height: 32px; min-width: 32px; padding: 0 8px; border-radius: 10px; flex: 0 0 auto;
   background: var(--brand);
   border: 1px solid rgba(11, 183, 222, 0.55);
   display: grid; place-items: center;
-  color: #FFFFFF; font-family: var(--serif); font-size: 18px;
+  color: #FFFFFF; font-family: var(--font); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; white-space: nowrap;
 }
 .brand h1 {
   margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 500;
